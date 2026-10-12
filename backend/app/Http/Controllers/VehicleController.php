@@ -15,7 +15,7 @@ class VehicleController extends Controller
     public function index(Request $request): AnonymousResourceCollection
     {
         $filters = $request->validate([
-            'brand' => ['nullable', 'string'],
+            'brand' => ['nullable', 'string', 'max:255'],
             'page' => ['nullable', 'integer', 'min:1'],
         ]);
 
