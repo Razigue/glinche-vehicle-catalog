@@ -2,7 +2,7 @@ import { ref, watch, type Ref } from 'vue'
 import { fetchVehicles } from '../api'
 import type { PaginationMeta, Vehicle } from '../types'
 
-export function useVehicles(brand: Ref<string | null>, page: Ref<number>) {
+export function useVehicles(brands: Ref<string[]>, page: Ref<number>) {
   const vehicles = ref<Vehicle[]>([])
   const pagination = ref<PaginationMeta | null>(null)
   const loading = ref(false)
@@ -20,7 +20,7 @@ export function useVehicles(brand: Ref<string | null>, page: Ref<number>) {
 
     try {
       const { data, meta } = await fetchVehicles(
-        { brand: brand.value, page: page.value },
+        { brands: brands.value, page: page.value },
         { signal: request.signal },
       )
       vehicles.value = data
@@ -37,7 +37,7 @@ export function useVehicles(brand: Ref<string | null>, page: Ref<number>) {
     }
   }
 
-  watch([brand, page], load, { immediate: true })
+  watch([brands, page], load, { immediate: true })
 
   return { vehicles, pagination, loading, error, reload: load }
 }

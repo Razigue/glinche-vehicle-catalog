@@ -1,27 +1,33 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, useTemplateRef, watch } from 'vue'
 import BrandFilter from './components/BrandFilter.vue'
 import PaginationNav from './components/PaginationNav.vue'
+import logoUrl from './assets/glinche-automobiles-logo.svg'
 import VehicleList from './components/VehicleList.vue'
 import { useBrands } from './composables/useBrands'
 import { useUrlQuery } from './composables/useUrlQuery'
 import { useVehicles } from './composables/useVehicles'
 
-const { brand, page, replace: replaceQuery } = useUrlQuery()
+const { brands: brandSlugs, page, replace: replaceQuery } = useUrlQuery()
 const { brands, error: brandsError, reload: reloadBrands } = useBrands()
-const { vehicles, pagination, loading, error, reload } = useVehicles(brand, page)
+const { vehicles, pagination, loading, error, reload } = useVehicles(brandSlugs, page)
 
-const selectedBrand = computed({
-  get: () => brand.value,
-  set: (slug) => {
-    brand.value = slug
+const selectedBrands = computed({
+  get: () => brandSlugs.value,
+  set: (slugs) => {
+    brandSlugs.value = slugs
     page.value = 1
   },
 })
 
-const selectedBrandName = computed(
-  () => brands.value.find((candidate) => candidate.slug === brand.value)?.name,
+const selectedBrandNames = computed(() =>
+  new Intl.ListFormat('fr', { type: 'disjunction' }).format(
+    brands.value.filter((candidate) => brandSlugs.value.includes(candidate.slug)).map((candidate) => candidate.name),
+  ),
 )
+
+const stickyHeader = useTemplateRef('stickyHeader')
+const results = useTemplateRef('results')
 
 const isFirstLoad = computed(() => loading.value && pagination.value === null)
 
@@ -32,8 +38,10 @@ const resultsLabel = computed(() => {
 })
 
 watch(brands, (availableBrands) => {
-  if (brand.value && !availableBrands.some((candidate) => candidate.slug === brand.value)) {
-    replaceQuery({ brand: null, page: 1 })
+  const knownSlugs = brandSlugs.value.filter((slug) => availableBrands.some((candidate) => candidate.slug === slug))
+
+  if (knownSlugs.length < brandSlugs.value.length) {
+    replaceQuery({ brands: knownSlugs, page: 1 })
   }
 })
 
@@ -43,31 +51,52 @@ watch(pagination, (meta) => {
   }
 })
 
-watch(page, () => window.scrollTo({ top: 0, behavior: 'smooth' }))
+watch(page, () => {
+  if (!results.value || !stickyHeader.value) {
+    return
+  }
+
+  const hiddenBy = results.value.getBoundingClientRect().top - stickyHeader.value.offsetHeight - 24
+
+  if (hiddenBy < 0) {
+    window.scrollBy({ top: hiddenBy })
+  }
+})
 </script>
 
 <template>
-  <header class="border-b border-slate-200 bg-white">
-    <div class="mx-auto max-w-6xl px-4 py-6">
-      <p class="text-sm font-semibold tracking-wide text-blue-700 uppercase">Glinche Automobiles</p>
-      <h1 class="text-2xl font-bold sm:text-3xl">Nos véhicules</h1>
-    </div>
-  </header>
+  <div ref="stickyHeader" class="sticky top-0 z-20">
+    <header class="bg-brand text-white">
+      <div class="mx-auto flex h-14 max-w-6xl items-center gap-4 px-4 sm:h-16 sm:gap-6">
+        <img :src="logoUrl" alt="Glinche Automobiles" class="h-7 w-auto brightness-0 invert sm:h-9" />
+        <span class="h-7 w-px bg-white/30" aria-hidden="true" />
+        <h1 class="text-base font-bold sm:text-lg">Nos véhicules</h1>
+      </div>
+    </header>
 
-  <main class="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8">
-    <section class="flex flex-col gap-2">
-      <BrandFilter v-if="brands.length > 0" v-model="selectedBrand" :brands="brands" />
-      <p v-if="brandsError" class="text-sm text-red-700">
-        Les marques n'ont pas pu être chargées.
-        <button type="button" class="font-medium underline" @click="reloadBrands">Réessayer</button>
-      </p>
+    <section class="border-b border-line bg-white" aria-label="Filtres">
+      <div class="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-3">
+        <div class="flex items-center justify-between gap-4">
+          <BrandFilter v-if="brands.length > 0" v-model="selectedBrands" :brands="brands" class="w-full sm:w-auto" />
+          <p v-if="pagination && !error" class="hidden shrink-0 text-sm text-muted sm:block" aria-live="polite">
+            {{ resultsLabel }}
+          </p>
+        </div>
+        <p v-if="brandsError" class="text-sm text-red-700">
+          Les marques n'ont pas pu être chargées.
+          <button type="button" class="font-bold underline" @click="reloadBrands">Réessayer</button>
+        </p>
+      </div>
     </section>
+  </div>
 
-    <div v-if="error" role="alert" class="rounded-xl border border-red-200 bg-red-50 p-6 text-center">
-      <p class="font-medium text-red-800">Les véhicules n'ont pas pu être chargés.</p>
+  <main class="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:py-8">
+
+    <div v-if="error" role="alert" class="rounded-lg border border-red-200 bg-red-50 p-6 text-center">
+      <p class="font-bold text-red-800">Les véhicules n'ont pas pu être chargés.</p>
       <button
         type="button"
-        class="mt-3 rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800"
+        class="mt-3 rounded-lg bg-brand px-4 py-2 text-sm font-bold text-white hover:bg-brand-dark"
         @click="reload"
       >
         Réessayer
@@ -75,23 +104,27 @@ watch(page, () => window.scrollTo({ top: 0, behavior: 'smooth' }))
     </div>
 
     <ul v-else-if="isFirstLoad" class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3" aria-label="Chargement des véhicules">
-      <li v-for="placeholder in 6" :key="placeholder" class="h-96 animate-pulse rounded-xl bg-slate-200" />
+      <li v-for="placeholder in 6" :key="placeholder" class="h-96 animate-pulse rounded-lg bg-line/50" />
     </ul>
 
     <p
       v-else-if="vehicles.length === 0"
-      class="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-600"
+      class="rounded-lg border border-dashed border-line bg-white p-10 text-center text-muted"
     >
       {{
-        selectedBrandName
-          ? `Aucun véhicule ${selectedBrandName} n'est disponible pour le moment.`
+        selectedBrandNames
+          ? `Aucun véhicule ${selectedBrandNames} n'est disponible pour le moment.`
           : "Aucun véhicule n'est disponible pour le moment."
       }}
     </p>
 
-    <section v-else-if="pagination" class="flex flex-col gap-6" :aria-busy="loading">
-      <p class="text-sm text-slate-600" aria-live="polite">{{ resultsLabel }}</p>
-      <VehicleList :vehicles="vehicles" class="transition-opacity" :class="{ 'opacity-50': loading }" />
+    <section v-else-if="pagination" ref="results" class="flex flex-col gap-6" :aria-busy="loading">
+      <p class="-mb-2 text-sm text-muted sm:hidden">{{ resultsLabel }}</p>
+      <div class="transition-opacity duration-200" :class="{ 'opacity-50 delay-200': loading }">
+        <Transition mode="out-in" enter-from-class="opacity-0" enter-active-class="transition-opacity duration-200 ease-out">
+          <VehicleList :key="vehicles.map((vehicle) => vehicle.id).join()" :vehicles="vehicles" />
+        </Transition>
+      </div>
       <PaginationNav v-model="page" :last-page="pagination.last_page" />
     </section>
   </main>

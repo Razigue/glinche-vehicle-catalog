@@ -50,6 +50,17 @@ it('filters the vehicles by brand slug', function () {
         ->assertJsonPath('data.*.id', $peugeotVehicles->sortBy(['model', 'id'])->pluck('id')->values()->all());
 });
 
+it('filters the vehicles by several comma-separated brand slugs', function () {
+    $peugeotVehicle = Vehicle::factory()->for(Brand::factory()->create(['name' => 'Peugeot', 'slug' => 'peugeot']))->create();
+    $renaultVehicle = Vehicle::factory()->for(Brand::factory()->create(['name' => 'Renault', 'slug' => 'renault']))->create();
+    Vehicle::factory()->for(Brand::factory()->create(['slug' => 'toyota']))->create();
+
+    $this->getJson('/api/vehicles?brand=renault,peugeot')
+        ->assertOk()
+        ->assertJsonPath('meta.total', 2)
+        ->assertJsonPath('data.*.id', [$peugeotVehicle->id, $renaultVehicle->id]);
+});
+
 it('returns no vehicle for an unknown brand', function () {
     Vehicle::factory()->create();
 
