@@ -13,6 +13,7 @@ final readonly class VehicleData
     public function __construct(
         public string $externalId,
         public string $brandName,
+        public string $brandSlug,
         public string $model,
         public ?string $version,
         public ?int $year,

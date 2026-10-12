@@ -7,7 +7,7 @@ import { useBrands } from './composables/useBrands'
 import { useUrlQuery } from './composables/useUrlQuery'
 import { useVehicles } from './composables/useVehicles'
 
-const { brand, page } = useUrlQuery()
+const { brand, page, replace: replaceQuery } = useUrlQuery()
 const { brands, error: brandsError, reload: reloadBrands } = useBrands()
 const { vehicles, pagination, loading, error, reload } = useVehicles(brand, page)
 
@@ -33,13 +33,13 @@ const resultsLabel = computed(() => {
 
 watch(brands, (availableBrands) => {
   if (brand.value && !availableBrands.some((candidate) => candidate.slug === brand.value)) {
-    selectedBrand.value = null
+    replaceQuery({ brand: null, page: 1 })
   }
 })
 
 watch(pagination, (meta) => {
   if (meta && page.value > meta.last_page) {
-    page.value = meta.last_page
+    replaceQuery({ page: meta.last_page })
   }
 })
 
