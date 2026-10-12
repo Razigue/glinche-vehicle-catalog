@@ -2,7 +2,7 @@
 
 Récupère le stock de l'API partenaires Glinche, le stocke en base et l'affiche avec un filtre multi-marques et une pagination.
 
-**Laravel 13 · MySQL 9.7 · Vue 3.5 · TypeScript · Tailwind CSS 4 · Docker** · 90 tests
+**Laravel 13 · MySQL 9.7 · Vue 3.5 · TypeScript · Tailwind CSS 4 · Docker** · 92 tests
 
 ![Catalogue](docs/desktop.png)
 
@@ -25,7 +25,7 @@ Catalogue : http://localhost:5173 · API : http://localhost:8000/api
 ```bash
 docker compose exec app php artisan vehicles:sync   # synchro manuelle (sinon toutes les heures)
 docker compose exec app php artisan test            # 61 tests Pest
-docker compose exec node npm test                   # 29 tests Vitest
+docker compose exec node npm test                   # 31 tests Vitest
 docker compose exec node npm run typecheck          # vérification TypeScript (vue-tsc)
 ```
 
@@ -94,7 +94,7 @@ classDiagram
 
 Une classe, une responsabilité : le **client** gère HTTP et le token, le **mapper** le format Glinche, le **synchroniseur** les règles de mise à jour. Tout est dans `backend/app/Services/Glinche/`.
 
-Côté front : `App.vue`, 4 composants, 3 composables (`useBrands`, `useVehicles`, `useUrlQuery`). Les réponses de l'API sont typées dans `types.ts` et l'URL est la seule source d'état. L'en-tête et la barre de filtres restent fixés en haut ; le filtre est un menu à cases à cocher (clavier, Échap, clic extérieur) et la pagination est numérotée, avec des points de suspension (`utils/pagination.ts`).
+Côté front : `App.vue`, 5 composants, 3 composables (`useBrands`, `useVehicles`, `useUrlQuery`). Les réponses de l'API sont typées dans `types.ts` et l'URL est la seule source d'état. L'en-tête et la barre de filtres restent fixés en haut ; le filtre est un menu à cases à cocher (clavier, Échap, clic extérieur) et la pagination est numérotée, avec des points de suspension (`utils/pagination.ts`). Pendant le chargement, des squelettes reprennent la forme des cartes et du filtre.
 
 ## Choix techniques
 
