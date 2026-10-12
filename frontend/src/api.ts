@@ -30,13 +30,13 @@ export async function fetchBrands(): Promise<Brand[]> {
 }
 
 export function fetchVehicles(
-  { brand, page }: { brand: string | null; page: number },
+  { brands, page }: { brands: string[]; page: number },
   { signal }: RequestOptions = {},
 ): Promise<Paginated<Vehicle>> {
   const query = new URLSearchParams({ page: String(page) })
 
-  if (brand) {
-    query.set('brand', brand)
+  if (brands.length > 0) {
+    query.set('brand', brands.join(','))
   }
 
   return getJson(`/api/vehicles?${query}`, { signal })
