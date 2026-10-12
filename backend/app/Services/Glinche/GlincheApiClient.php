@@ -37,6 +37,8 @@ class GlincheApiClient
      */
     public function fetchVehicles(): array
     {
+        $this->ensureConfigured();
+
         try {
             $adverts = $this->authenticatedGet('partners/vehicles')->json();
         } catch (ConnectionException $exception) {
@@ -48,6 +50,19 @@ class GlincheApiClient
         }
 
         return $adverts;
+    }
+
+    private function ensureConfigured(): void
+    {
+        $missingVariables = collect([
+            'GLINCHE_API_URL' => $this->baseUrl,
+            'GLINCHE_API_EMAIL' => $this->email,
+            'GLINCHE_API_PASSWORD' => $this->password,
+        ])->filter(fn (string $value) => blank($value))->keys();
+
+        if ($missingVariables->isNotEmpty()) {
+            throw new GlincheApiException("Missing configuration: {$missingVariables->implode(', ')}.");
+        }
     }
 
     private function isListOfAdverts(mixed $payload): bool
