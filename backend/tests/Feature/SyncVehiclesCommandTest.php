@@ -1,10 +1,12 @@
 <?php
 
+use App\Console\Commands\SyncVehicles;
 use App\Enums\Energy;
 use App\Models\Brand;
 use App\Models\Vehicle;
 use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Sleep;
 
@@ -140,6 +142,38 @@ it('skips an invalid advert and keeps its last valid copy', function () {
 
     expect(Vehicle::query()->orderBy('external_id')->pluck('mileage', 'external_id')->all())
         ->toBe(['GLI00004457' => 20, 'GLI00281653' => 20]);
+});
+
+it('keeps synchronizing the other adverts when one does not fit in the database', function () {
+    fakeGlincheFeed([
+        glincheAdvert(['reference' => 'GLI00000001', 'vehicle' => ['finish' => str_repeat('x', 300)]]),
+        glincheAdvert(['reference' => 'GLI00000002']),
+    ]);
+
+    $this->artisan('vehicles:sync')->assertSuccessful();
+
+    expect(Vehicle::query()->pluck('external_id')->all())->toBe(['GLI00000002']);
+});
+
+it('does not run while another synchronization holds the lock', function () {
+    Http::fake();
+    $lock = Cache::lock(SyncVehicles::LOCK_NAME, 60);
+    $lock->get();
+
+    $this->artisan('vehicles:sync')
+        ->expectsOutputToContain('already running')
+        ->assertSuccessful();
+
+    Http::assertNothingSent();
+    $lock->release();
+});
+
+it('releases the lock once the synchronization is over', function () {
+    fakeGlincheFeed([]);
+
+    $this->artisan('vehicles:sync')->assertSuccessful();
+
+    expect(Cache::lock(SyncVehicles::LOCK_NAME, 60)->get())->toBeTrue();
 });
 
 it('fails without touching the stored vehicles when the API is down', function () {
