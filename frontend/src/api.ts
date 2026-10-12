@@ -13,8 +13,14 @@ interface RequestOptions {
   signal?: AbortSignal
 }
 
+export const REQUEST_TIMEOUT_MS = 10_000
+
 async function getJson<T>(path: string, { signal }: RequestOptions = {}): Promise<T> {
-  const response = await fetch(path, { headers: { Accept: 'application/json' }, signal })
+  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+  const response = await fetch(path, {
+    headers: { Accept: 'application/json' },
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  })
 
   if (!response.ok) {
     throw new ApiError(response.status)
