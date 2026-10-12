@@ -15,6 +15,10 @@ fi
 
 php artisan migrate --force
 
+if ! php artisan vehicles:sync; then
+    echo "Initial vehicle synchronization failed, run 'php artisan vehicles:sync' once the API is reachable." >&2
+fi
+
 touch /tmp/ready
 
 exec php-fpm
