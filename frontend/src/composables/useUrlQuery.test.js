@@ -52,6 +52,31 @@ describe('useUrlQuery', () => {
     expect(window.location.search).toBe('')
   })
 
+  it('replaces the current history entry when correcting the selection', async () => {
+    window.history.replaceState(null, '', '/?brand=unknown&page=9')
+    const historyLength = window.history.length
+    const { brand, page, replace } = mountUrlQuery()
+
+    replace({ brand: null, page: 1 })
+    await nextTick()
+
+    expect(brand.value).toBeNull()
+    expect(page.value).toBe(1)
+    expect(window.location.search).toBe('')
+    expect(window.history.length).toBe(historyLength)
+  })
+
+  it('keeps adding history entries for user changes after a correction that changed nothing', async () => {
+    const historyLength = window.history.length
+    const { brand, replace } = mountUrlQuery()
+
+    replace({ page: 1 })
+    brand.value = 'renault'
+    await nextTick()
+
+    expect(window.history.length).toBe(historyLength + 1)
+  })
+
   it('restores the selection when navigating back in the history', async () => {
     const { brand, page } = mountUrlQuery()
     brand.value = 'renault'
@@ -61,7 +86,11 @@ describe('useUrlQuery', () => {
     window.dispatchEvent(new PopStateEvent('popstate'))
     await nextTick()
 
+    const historyLength = window.history.length
+    await nextTick()
+
     expect(brand.value).toBe('peugeot')
     expect(page.value).toBe(3)
+    expect(window.history.length).toBe(historyLength)
   })
 })

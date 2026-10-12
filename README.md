@@ -108,13 +108,13 @@ La commande affiche puis journalise (`storage/logs/laravel.log`) le bilan de la 
 +---------+---------+-----------+---------+---------+
 ```
 
-Elle est aussi planifiée **toutes les heures** par le service `scheduler` (`php artisan schedule:work`), sans chevauchement possible, et lancée une fois au démarrage du conteneur `app`.
+Elle est aussi planifiée **toutes les heures** par le service `scheduler` (`php artisan schedule:work`), et lancée une fois au démarrage du conteneur `app`. Un verrou empêche deux synchronisations simultanées : une exécution qui le trouve pris s'arrête avec un avertissement.
 
 ## Tests
 
 ```bash
-docker compose exec app php artisan test   # back-end : 40 tests Pest
-docker compose exec node npm test          # front-end : 18 tests Vitest
+docker compose exec app php artisan test   # back-end : 60 tests Pest
+docker compose exec node npm test          # front-end : 21 tests Vitest
 ```
 
 Sans Docker : `php artisan test` dans `backend/` et `npm test` dans `frontend/`.
@@ -123,10 +123,10 @@ Les tests back-end tournent sur SQLite en mémoire et simulent l'API Glinche ave
 
 - le client (token mis en cache, nouvelle connexion après un `401`, retry sur erreur serveur, erreurs réseau et réponses inattendues) ;
 - le mapper (prix, photo, codes inconnus, champs obligatoires) ;
-- la synchronisation (création, mise à jour, idempotence, suppression, regroupement des marques, annonce invalide, API indisponible, planification) ;
-- les endpoints (forme de la réponse, filtre, pagination, tri, validation).
+- la synchronisation (création, mise à jour, idempotence, suppression, regroupement des marques, annonce invalide, API indisponible, verrou, planification) ;
+- les endpoints (forme de la réponse, filtre, pagination, tri, validation, limitation de débit).
 
-Les tests front-end couvrent le formatage, le filtre, la carte (image de secours), le composable `useVehicles` (requêtes concurrentes, erreurs) et la synchronisation avec l'URL.
+Les tests front-end couvrent le formatage, le filtre, la carte (image de secours), le composable `useVehicles` (requêtes concurrentes, erreurs) et la synchronisation avec l'URL (historique du navigateur, corrections sans nouvelle entrée).
 
 ## API exposée
 
@@ -188,6 +188,8 @@ frontend/src/
 docker/                                       # Dockerfile PHP, script de démarrage, configuration nginx
 ```
 
+Les consignes pour les agents IA (conventions, pièges connus) sont dans [`AGENTS.md`](AGENTS.md).
+
 Git flow : `main`, `develop` et une branche `feature/*` par fonctionnalité, fusionnée dans `develop` avec `--no-ff`. Commits conventionnels.
 
 ## Choix techniques
@@ -208,9 +210,9 @@ La documentation est une page Swagger rendue en JavaScript. Elle charge la spéc
 
 ### Mapping et données
 
-- **Validation de chaque annonce** (`Validator`) avant le mapping : une annonce incomplète est ignorée et journalisée, sans bloquer les autres.
+- **Validation de chaque annonce** (`Validator`) avant le mapping : une annonce incomplète, ou dont une valeur ne tiendrait pas dans sa colonne (texte trop long, kilométrage hors limites, marque sans slug possible), est ignorée et journalisée sans bloquer les autres. Sans cette validation, une seule erreur SQL dans la transaction ferait échouer toute la synchronisation.
 - **Prix** : la spécification indique que `price` est le prix public TTC, mais ce champ est optionnel et absent des données actuelles. Le mapper l'utilise en priorité, puis se rabat sur `merchantPrice` (prix marchand TTC). Le prix est stocké **en centimes** (entier), et la conversion se fait sur la chaîne pour éviter les erreurs d'arrondi des flottants. Un prix nul devient « Prix sur demande » plutôt que « 0 € ».
-- **Photo** : la photo `MAIN` (une seule autorisée par la spécification), sinon la première photo, sinon une image de secours côté front.
+- **Photo** : la photo `MAIN` (une seule autorisée par la spécification), sinon la première photo valide, sinon une image de secours côté front. Seules les URL HTTP(S) sont retenues. Une photo invalide est ignorée, sans rejeter le véhicule.
 - **Énergie et boîte de vitesses** : les codes (`EH`, `AUT`…) sont stockés tels quels et convertis par des enums PHP dont les libellés français reprennent la spécification. Un code inconnu donne `null` au lieu de faire échouer la synchronisation.
 - **`raw`** conserve l'annonce complète (équipements, autres photos…) pour de futurs usages sans nouvel appel à l'API.
 
@@ -244,6 +246,8 @@ Le filtre est appliqué immédiatement au clic. La liste précédente reste affi
 ### Docker
 
 Images officielles uniquement (`php:8.4-fpm-alpine` complétée par `pdo_mysql`, `nginx`, `mysql:9.7`, `node:24-alpine`). Le service `app` n'est déclaré `healthy` qu'une fois les migrations passées : `nginx` et `scheduler` attendent cet état, ce qui évite les erreurs au premier démarrage. Vite relaie `/api` vers nginx, donc le front et l'API partagent la même origine et aucune configuration CORS n'est nécessaire.
+
+Durcissement : ports publiés sur `127.0.0.1` uniquement, en-têtes de sécurité et seul `index.php` exécutable côté nginx, limite de 120 requêtes par minute et par IP sur l'API. Le healthcheck MySQL passe par TCP : le serveur temporaire lancé pendant l'initialisation n'écoute que sur le socket, donc un ping par socket déclarerait la base prête trop tôt.
 
 ## Difficultés rencontrées
 
