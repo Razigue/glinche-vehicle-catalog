@@ -1,76 +1,76 @@
 # AGENTS.md
 
-Consignes pour les agents qui travaillent sur ce dépôt. Le contexte produit, l'installation et les choix techniques sont dans le `README.md` : lire celui-ci d'abord.
+Guidelines for agents working on this repository. Product context, setup and technical choices are in `README.md`: read it first.
 
-## Projet
+## Project
 
-Exercice technique de recrutement (alternance Full Stack). L'application synchronise les véhicules de l'API partenaires Glinche V1 en base et les affiche avec un filtre par marque et une pagination. La qualité du code est le critère principal d'évaluation.
+Technical recruitment exercise (Full Stack work-study position). The application syncs vehicles from the Glinche V1 partner API into the database and displays them with a brand filter and pagination. Code quality is the main evaluation criterion.
 
-- `backend/` : Laravel 13, API uniquement (pas de vues, pas de routes web), Pest
-- `frontend/` : Vue 3.5 SPA + TypeScript (Composition API, `<script setup lang="ts">`), Vite, Tailwind CSS 4, Vitest
-- `docker/` et `compose.yaml` : services `app`, `nginx`, `mysql`, `node`, `scheduler`
+- `backend/`: Laravel 13, API only (no views, no web routes), Pest
+- `frontend/`: Vue 3.5 SPA + TypeScript (Composition API, `<script setup lang="ts">`), Vite, Tailwind CSS 4, Vitest
+- `docker/` and `compose.yaml`: `app`, `nginx`, `mysql`, `node`, `scheduler` services
 
-## Commandes
+## Commands
 
 ```bash
-docker compose up -d --build                      # tout démarrer (migrations + première synchro incluses)
-docker compose exec app php artisan test          # tests back-end
-docker compose exec app ./vendor/bin/pint         # formatage PHP, avant chaque commit
-docker compose exec node npm test                 # tests front-end
-docker compose exec node npm run typecheck        # vérification TypeScript
-docker compose exec app php artisan vehicles:sync # synchronisation manuelle
+docker compose up -d --build                      # start everything (migrations + first sync included)
+docker compose exec app php artisan test          # back-end tests
+docker compose exec app ./vendor/bin/pint         # PHP formatting, before every commit
+docker compose exec node npm test                 # front-end tests
+docker compose exec node npm run typecheck        # TypeScript check
+docker compose exec app php artisan vehicles:sync # manual sync
 ```
 
-Sans Docker : mêmes commandes depuis `backend/` ou `frontend/`. Avant de committer, les tests back et front et la vérification TypeScript doivent passer, et Pint ne doit rien signaler.
+Without Docker: same commands from `backend/` or `frontend/`. Before committing, back-end and front-end tests and the TypeScript check must pass, and Pint must report nothing.
 
 ## Conventions
 
-- **Langue** : code, noms, commits et messages de log en anglais. README, AGENTS.md et textes de l'interface en français.
-- **Commentaires au strict minimum** : seulement pour un « pourquoi » non évident (ex. l'ordre des clés JSON dans `VehicleSynchronizer`).
-- **Pas de sur-ingénierie** : pas de repository pattern, pas de Pinia, pas de Vue Router, pas de dépendance sans besoin réel.
-- **Style** : suivre le code existant. PHP formaté par Pint. Commandes Artisan avec les attributs `#[Signature]` et `#[Description]` (stub Laravel 13). Côté front : TypeScript strict, sans point-virgule, apostrophes simples.
-- **Git flow** : `main`, `develop`, une branche `feature/*` par sujet, fusionnée dans `develop` avec `--no-ff`. Commits conventionnels (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`). Ne rien pousser ni fusionner dans `main` sans accord explicite.
+- **Language**: code, names, commits, log messages and this file in English. README and UI text in French.
+- **Comments kept to a strict minimum**: only for a non-obvious "why" (e.g. the JSON key order in `VehicleSynchronizer`).
+- **No over-engineering**: no repository pattern, no Pinia, no Vue Router, no dependency without a real need.
+- **Style**: follow the existing code. PHP formatted by Pint. Artisan commands use the `#[Signature]` and `#[Description]` attributes (Laravel 13 stub). Front end: strict TypeScript, no semicolons, single quotes.
+- **Git flow**: `main`, `develop`, one `feature/*` branch per topic, merged into `develop` with `--no-ff`. Conventional commits (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`). Never push or merge into `main` without explicit approval.
 
 ## Secrets
 
-- Les identifiants Glinche vont **uniquement** dans `backend/.env` (ignoré par Git). `backend/.env.example` garde des valeurs vides.
-- Ne jamais committer le sujet PDF : il contient le mot de passe de l'API.
-- Avant chaque commit, vérifier qu'aucun fichier inattendu n'est indexé (ex. une base SQLite créée par une commande de test).
+- Glinche credentials go **only** in `backend/.env` (ignored by Git). `backend/.env.example` keeps empty values.
+- Never commit the PDF brief: it contains the API password.
+- Before each commit, check that no unexpected file is staged (e.g. a SQLite database created by a test command).
 
-## API Glinche V1 : faits vérifiés
+## Glinche V1 API: verified facts
 
-- La spécification OpenAPI est à `https://marketplace-dev.glinche-automobiles.com/docs/openapi.json` (la page de doc est rendue en JavaScript).
-- `POST /api/partners/login` renvoie un token Sanctum (`id|secret`), sans durée de validité connue.
-- `GET /api/partners/vehicles` renvoie **tout le stock dans un tableau, sans pagination**. N'en ajoutez pas côté client Glinche.
-- `reference` identifie une annonce (`external_id`). `prices.price` (public TTC) est optionnel et absent des données actuelles, `merchantPrice` sert de repli. Les codes `energy` et `gearbox` sont des enums documentées.
-- Les données de test contiennent des incohérences connues (listées dans le README). On les affiche telles quelles, sans les « corriger ».
+- The OpenAPI spec is at `https://marketplace-dev.glinche-automobiles.com/docs/openapi.json` (the docs page is rendered in JavaScript).
+- `POST /api/partners/login` returns a Sanctum token (`id|secret`), with no known expiry.
+- `GET /api/partners/vehicles` returns **the whole stock in a single array, without pagination**. Do not add any in the Glinche client.
+- `reference` identifies a listing (`external_id`). `prices.price` (public, VAT included) is optional and missing from current data; `merchantPrice` is the fallback. The `energy` and `gearbox` codes are documented enums.
+- The test data contains known inconsistencies (listed in the README). They are displayed as is, without "fixing" them.
 
-## Règles métier à préserver
+## Business rules to preserve
 
-- **Synchronisation miroir** : un véhicule absent du flux ou portant une `deleteDate` est supprimé. Une erreur d'API ne modifie rien (appel avant la transaction).
-- **Une annonce invalide ne bloque jamais les autres** : le mapper la valide (`ValidationException`), elle est journalisée, ignorée, et sa dernière copie valide est conservée. Toute contrainte de colonne (longueur, plage numérique) doit donc être validée dans `VehicleMapper` : une erreur SQL dans la transaction ferait échouer toute la synchronisation.
-- **Photos** : une photo invalide ou non HTTP(S) est ignorée, elle ne rejette pas le véhicule.
-- **Marques identifiées par slug** (« Citroën » = « Citroen »). Un fabricant sans slug possible est rejeté.
-- **Idempotence** : une synchro sans changement compte les véhicules en `unchanged`. MySQL réordonne les clés JSON, d'où la comparaison non stricte de `raw`.
-- **Un seul `vehicles:sync` à la fois** (verrou de cache dans la commande).
-- **Prix en centimes TTC**, entier, conversion sans flottant. Un prix nul ou absent donne « Prix sur demande ».
-- **Pagination serveur à 6 véhicules par page** (`VehicleController::PER_PAGE`), tri stable marque → modèle → id.
+- **Mirror sync**: a vehicle missing from the feed or carrying a `deleteDate` is deleted. An API error changes nothing (the call happens before the transaction).
+- **An invalid listing never blocks the others**: the mapper validates it (`ValidationException`), it is logged and skipped, and its last valid copy is kept. Any column constraint (length, numeric range) must therefore be validated in `VehicleMapper`: an SQL error inside the transaction would fail the whole sync.
+- **Photos**: an invalid or non-HTTP(S) photo is skipped; it does not reject the vehicle.
+- **Brands identified by slug** ("Citroën" = "Citroen"). A manufacturer with no possible slug is rejected.
+- **Idempotence**: a sync with no changes counts vehicles as `unchanged`. MySQL reorders JSON keys, hence the non-strict comparison of `raw`.
+- **Only one `vehicles:sync` at a time** (cache lock in the command).
+- **Prices in cents, VAT included**, integer, converted without floats. A zero or missing price shows "Prix sur demande".
+- **Server-side pagination at 6 vehicles per page** (`VehicleController::PER_PAGE`), stable sort brand → model → id.
 
-## Pièges de test connus
+## Known testing pitfalls
 
-- Les tests back tournent sur SQLite en mémoire, la prod sur MySQL. Tout ce qui dépend du moteur (JSON, collation, tailles de colonnes) doit être vérifié aussi sur MySQL via Docker.
-- `Http::fake()` **empile** les stubs et le premier qui correspond gagne. Pour plusieurs synchronisations dans un même test, utiliser `fakeGlincheFeed($feed1, $feed2, ...)` (séquence), pas deux appels successifs.
-- Le client retente les erreurs 5xx : appeler `Sleep::fake()` dans les tests concernés.
-- `glincheAdvert($overrides)` (dans `tests/Pest.php`) construit une annonce réaliste. Partir de lui plutôt que d'écrire une annonce à la main.
-- Côté front, les corrections automatiques de l'URL (marque inconnue, page hors limites) passent par `replace()` de `useUrlQuery`, jamais par une affectation directe : sinon le bouton retour du navigateur boucle sur l'URL invalide.
+- Back-end tests run on in-memory SQLite, production on MySQL. Anything engine-dependent (JSON, collation, column sizes) must also be checked on MySQL via Docker.
+- `Http::fake()` **stacks** stubs and the first match wins. For several syncs in one test, use `fakeGlincheFeed($feed1, $feed2, ...)` (sequence), not two successive calls.
+- The client retries 5xx errors: call `Sleep::fake()` in the relevant tests.
+- `glincheAdvert($overrides)` (in `tests/Pest.php`) builds a realistic listing. Start from it rather than writing a listing by hand.
+- On the front end, automatic URL corrections (unknown brand, out-of-range page) go through `replace()` from `useUrlQuery`, never through direct assignment: otherwise the browser back button loops on the invalid URL.
 
-## Vérifier avant d'annoncer « terminé »
+## Check before announcing "done"
 
-1. Tests back et front verts, vérification TypeScript et Pint propres.
-2. Stack Docker relancée : `vehicles:sync` deux fois de suite donne `unchanged` partout.
-3. Interface vérifiée dans un navigateur, sur desktop et mobile, y compris l'état d'erreur.
-4. README à jour si le comportement, les commandes ou le nombre de tests changent.
+1. Back-end and front-end tests green, TypeScript check and Pint clean.
+2. Docker stack restarted: running `vehicles:sync` twice in a row gives `unchanged` everywhere.
+3. UI checked in a browser, on desktop and mobile, including the error state.
+4. README updated if behavior, commands or the number of tests change.
 
-## Travail en parallèle
+## Parallel work
 
-Plusieurs sessions peuvent modifier ce dépôt en même temps. Avant d'éditer un fichier, relisez-le. Si `git status` montre des changements que vous n'avez pas faits, ne les écrasez pas : intégrez-les ou signalez-les.
+Several sessions may modify this repository at the same time. Re-read a file before editing it. If `git status` shows changes you did not make, do not overwrite them: integrate them or report them.
