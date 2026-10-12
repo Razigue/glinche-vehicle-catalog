@@ -89,11 +89,14 @@ it('fails when the API is unreachable', function () {
     app(GlincheApiClient::class)->fetchVehicles();
 })->throws(GlincheApiException::class, 'unreachable');
 
-it('fails when the vehicles payload is not a list', function () {
+it('fails when the vehicles payload is not a list of adverts', function (mixed $payload) {
     Http::fake([
         'glinche.test/api/partners/login' => Http::response(['token' => 'secret-token']),
-        'glinche.test/api/partners/vehicles' => Http::response(['data' => []]),
+        'glinche.test/api/partners/vehicles' => Http::response($payload),
     ]);
 
     app(GlincheApiClient::class)->fetchVehicles();
-})->throws(GlincheApiException::class, 'JSON array');
+})->throws(GlincheApiException::class, 'JSON array of objects')->with([
+    'object' => [['data' => []]],
+    'list of scalars' => [['GLI00004457']],
+]);
