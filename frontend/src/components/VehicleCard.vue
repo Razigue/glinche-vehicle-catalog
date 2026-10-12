@@ -8,10 +8,12 @@ const props = defineProps<{
   vehicle: Vehicle
 }>()
 
-const hasPhotoFailed = ref(false)
+const failedPhotoUrl = ref<string | null>(null)
 
 const photoUrl = computed(() =>
-  props.vehicle.photo_url && !hasPhotoFailed.value ? props.vehicle.photo_url : placeholderUrl,
+  props.vehicle.photo_url && props.vehicle.photo_url !== failedPhotoUrl.value
+    ? props.vehicle.photo_url
+    : placeholderUrl,
 )
 
 const price = computed(() => formatPrice(props.vehicle.price_in_cents))
@@ -33,7 +35,7 @@ const specifications = computed(() =>
       :alt="`${vehicle.brand.name} ${vehicle.model}`"
       class="aspect-4/3 w-full bg-slate-100 object-cover"
       loading="lazy"
-      @error="hasPhotoFailed = true"
+      @error="failedPhotoUrl = vehicle.photo_url"
     />
 
     <div class="flex flex-1 flex-col gap-3 p-4">
