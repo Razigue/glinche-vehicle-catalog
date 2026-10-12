@@ -7,7 +7,6 @@ use App\Models\Vehicle;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class VehicleSynchronizer
@@ -77,7 +76,7 @@ class VehicleSynchronizer
         $vehicle = Vehicle::query()->firstOrNew(['external_id' => $vehicleData->externalId]);
 
         $vehicle->fill([
-            'brand_id' => $this->findOrCreateBrand($vehicleData->brandName)->id,
+            'brand_id' => $this->findOrCreateBrand($vehicleData)->id,
             'model' => $vehicleData->model,
             'version' => $vehicleData->version,
             'year' => $vehicleData->year,
@@ -103,8 +102,11 @@ class VehicleSynchronizer
         $vehicle->save();
     }
 
-    private function findOrCreateBrand(string $name): Brand
+    private function findOrCreateBrand(VehicleData $vehicleData): Brand
     {
-        return Brand::query()->firstOrCreate(['slug' => Str::slug($name)], ['name' => $name]);
+        return Brand::query()->firstOrCreate(
+            ['slug' => $vehicleData->brandSlug],
+            ['name' => $vehicleData->brandName],
+        );
     }
 }
