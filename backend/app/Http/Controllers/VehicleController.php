@@ -21,7 +21,10 @@ class VehicleController extends Controller
 
         $vehicles = Vehicle::query()
             ->with('brand')
-            ->when($filters['brand'] ?? null, fn ($query, string $slug) => $query->whereRelation('brand', 'slug', $slug))
+            ->when($filters['brand'] ?? null, fn ($query, string $slugs) => $query->whereHas(
+                'brand',
+                fn ($brand) => $brand->whereIn('slug', explode(',', $slugs)),
+            ))
             ->orderBy(Brand::query()->select('name')->whereColumn('brands.id', 'vehicles.brand_id'))
             ->orderBy('model')
             ->orderBy('id')
