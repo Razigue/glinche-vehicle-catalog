@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fetchVehicles, REQUEST_TIMEOUT_MS } from './api'
+import { fetchVehicles, NetworkError, REQUEST_TIMEOUT_MS } from './api'
 
 function pendingFetch() {
   return vi.fn((_url: string, { signal }: RequestInit) => new Promise<Response>((_resolve, reject) => {
@@ -33,5 +33,11 @@ describe('api', () => {
     controller.abort()
 
     await expect(request).rejects.toMatchObject({ name: 'AbortError' })
+  })
+
+  it('reports an unreachable API as a network error', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+
+    await expect(fetchVehicles({ brands: [], page: 1 })).rejects.toBeInstanceOf(NetworkError)
   })
 })

@@ -2,7 +2,7 @@
 
 Récupère le stock de l'API partenaires Glinche, le stocke en base et l'affiche avec un filtre multi-marques et une pagination.
 
-**Laravel 13 · MySQL 9.7 · Vue 3.5 · TypeScript · Tailwind CSS 4 · Docker** · 94 tests
+**Laravel 13 · MySQL 9.7 · Vue 3.5 · TypeScript · Tailwind CSS 4 · Docker** · 99 tests
 
 ![Catalogue](docs/desktop.png)
 
@@ -25,7 +25,7 @@ Catalogue : http://localhost:5173 · API : http://localhost:8000/api
 ```bash
 docker compose exec app php artisan vehicles:sync   # synchro manuelle (sinon toutes les heures)
 docker compose exec app php artisan test            # 61 tests Pest
-docker compose exec node npm test                   # 33 tests Vitest
+docker compose exec node npm test                   # 38 tests Vitest
 docker compose exec node npm run typecheck          # vérification TypeScript (vue-tsc)
 ```
 
@@ -67,6 +67,7 @@ Le catalogue lit **uniquement la base locale** : il reste rapide et disponible m
 | Lien `?brand=peugeot,renault&page=2` partagé | Même sélection, bouton retour fonctionnel |
 | Clics rapides sur les filtres | Seule la dernière réponse s'affiche (requête précédente annulée) |
 | L'API du catalogue ne répond pas | Abandon après 10 s et bouton « Réessayer » |
+| Connexion coupée ou trop de requêtes (`429`) | Un message explique la cause |
 
 Chaque ligne est couverte par un test.
 

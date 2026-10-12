@@ -8,6 +8,7 @@ import VehicleList from './components/VehicleList.vue'
 import { useBrands } from './composables/useBrands'
 import { useUrlQuery } from './composables/useUrlQuery'
 import { useVehicles } from './composables/useVehicles'
+import { errorMessage } from './utils/errorMessage'
 
 const { brands: brandSlugs, page, replace: replaceQuery } = useUrlQuery()
 const { brands, loading: brandsLoading, error: brandsError, reload: reloadBrands } = useBrands()
@@ -90,7 +91,7 @@ watch(page, () => {
           </p>
         </div>
         <p v-if="brandsError" class="text-sm text-red-700">
-          Les marques n'ont pas pu être chargées.
+          Les marques n'ont pas pu être chargées. {{ errorMessage(brandsError) }}
           <button type="button" class="font-bold underline" @click="reloadBrands">Réessayer</button>
         </p>
       </div>
@@ -101,6 +102,7 @@ watch(page, () => {
 
     <div v-if="error" role="alert" class="rounded-lg border border-red-200 bg-red-50 p-6 text-center">
       <p class="font-bold text-red-800">Les véhicules n'ont pas pu être chargés.</p>
+      <p class="mt-1 text-sm text-red-700">{{ errorMessage(error) }}</p>
       <button
         type="button"
         class="mt-3 rounded-lg bg-brand px-4 py-2 text-sm font-bold text-white hover:bg-brand-dark"

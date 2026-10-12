@@ -9,6 +9,12 @@ export class ApiError extends Error {
   }
 }
 
+export class NetworkError extends Error {
+  constructor(cause: unknown) {
+    super('The API could not be reached', { cause })
+  }
+}
+
 interface RequestOptions {
   signal?: AbortSignal
 }
@@ -20,6 +26,8 @@ async function getJson<T>(path: string, { signal }: RequestOptions = {}): Promis
   const response = await fetch(path, {
     headers: { Accept: 'application/json' },
     signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  }).catch((exception: unknown) => {
+    throw exception instanceof TypeError ? new NetworkError(exception) : exception
   })
 
   if (!response.ok) {
