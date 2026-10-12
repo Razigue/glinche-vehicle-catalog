@@ -14,6 +14,12 @@ return [
     |
     */
 
+    'glinche' => [
+        'url' => env('GLINCHE_API_URL'),
+        'email' => env('GLINCHE_API_EMAIL'),
+        'password' => env('GLINCHE_API_PASSWORD'),
+    ],
+
     'postmark' => [
         'key' => env('POSTMARK_API_KEY'),
     ],
