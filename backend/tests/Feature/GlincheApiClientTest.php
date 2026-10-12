@@ -66,6 +66,15 @@ it('retries when the API has a transient server error', function () {
     expect(app(GlincheApiClient::class)->fetchVehicles())->toHaveCount(1);
 });
 
+it('fails without calling the API when the configuration is missing', function () {
+    Http::fake();
+    config(['services.glinche.url' => '', 'services.glinche.password' => null]);
+
+    expect(fn () => app(GlincheApiClient::class)->fetchVehicles())
+        ->toThrow(GlincheApiException::class, 'Missing configuration: GLINCHE_API_URL, GLINCHE_API_PASSWORD.');
+    Http::assertNothingSent();
+});
+
 it('fails when the credentials are refused', function () {
     Http::fake([
         'glinche.test/api/partners/login' => Http::response(['message' => 'Invalid credentials.'], 401),
