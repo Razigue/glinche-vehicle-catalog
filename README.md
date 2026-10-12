@@ -1,8 +1,8 @@
-# Glinche – Catalogue de véhicules
+# Glinche, catalogue de véhicules
 
-Récupère le stock de l'API partenaires Glinche, le stocke en base et l'affiche avec un filtre par marque et une pagination.
+Récupère le stock de l'API partenaires Glinche, le stocke en base et l'affiche avec un filtre multi-marques et une pagination.
 
-**Laravel 13 · MySQL 9.7 · Vue 3.5 · Tailwind CSS 4 · Docker** · 81 tests
+**Laravel 13 · MySQL 9.7 · Vue 3.5 · Tailwind CSS 4 · Docker** · 90 tests
 
 ![Catalogue](docs/desktop.png)
 
@@ -10,6 +10,8 @@ Récupère le stock de l'API partenaires Glinche, le stocke en base et l'affiche
   <td width="28%"><img src="docs/mobile.png" alt="Mobile"></td>
   <td valign="top"><img src="docs/erreur.png" alt="API indisponible"></td>
 </tr></table>
+
+*Filtre sur deux marques · version mobile · API indisponible.*
 
 ## Lancer
 
@@ -22,8 +24,8 @@ Catalogue : http://localhost:5173 · API : http://localhost:8000/api
 
 ```bash
 docker compose exec app php artisan vehicles:sync   # synchro manuelle (sinon toutes les heures)
-docker compose exec app php artisan test            # 60 tests Pest
-docker compose exec node npm test                   # 21 tests Vitest
+docker compose exec app php artisan test            # 61 tests Pest
+docker compose exec node npm test                   # 29 tests Vitest
 ```
 
 <details>
@@ -61,7 +63,7 @@ Le catalogue lit **uniquement la base locale** : il reste rapide et disponible m
 | Erreur serveur Glinche (5xx) | 3 tentatives, puis échec propre |
 | « Citroën » et « Citroen » | Une seule marque (identifiée par slug) |
 | Prix absent ou à 0 | « Prix sur demande », jamais « 0 € » |
-| Lien `?brand=renault&page=2` partagé | Même sélection, bouton retour fonctionnel |
+| Lien `?brand=peugeot,renault&page=2` partagé | Même sélection, bouton retour fonctionnel |
 | Clics rapides sur les filtres | Seule la dernière réponse s'affiche (requête précédente annulée) |
 
 Chaque ligne est couverte par un test.
@@ -91,7 +93,7 @@ classDiagram
 
 Une classe, une responsabilité : le **client** gère HTTP et le token, le **mapper** le format Glinche, le **synchroniseur** les règles de mise à jour. Tout est dans `backend/app/Services/Glinche/`.
 
-Côté front : `App.vue`, 4 composants, 3 composables (`useBrands`, `useVehicles`, `useUrlQuery`). L'URL est la seule source d'état.
+Côté front : `App.vue`, 4 composants, 3 composables (`useBrands`, `useVehicles`, `useUrlQuery`). L'URL est la seule source d'état. L'en-tête et la barre de filtres restent fixés en haut ; le filtre est un menu à cases à cocher (clavier, Échap, clic extérieur) et la pagination est numérotée, avec des points de suspension (`utils/pagination.js`).
 
 ## Choix techniques
 
@@ -99,6 +101,8 @@ Côté front : `App.vue`, 4 composants, 3 composables (`useBrands`, `useVehicles
 - **Pagination côté serveur**, 6 par page (grille de 1, 2 ou 3 colonnes), tri stable marque → modèle → id.
 - **Annonce brute conservée** (colonne `raw`) : une fiche détaillée pourra s'en servir sans nouvel appel.
 - **Pas de Pinia, Vue Router ni repository pattern** : un seul écran, rien à justifier.
+- **Filtre multi-marques** : un seul paramètre `brand` avec des slugs séparés par des virgules, lisible dans l'URL et compatible avec les liens à une marque.
+- **Charte Glinche** : bleu pétrole `#006281`, police Lato et logo officiel, relevés sur glinche-automobiles.com. Les couleurs sont des tokens Tailwind dans `style.css`, sans ombres portées.
 - **Même origine** : Vite relaie `/api` vers nginx, donc aucune configuration CORS.
 
 ## Points notables
