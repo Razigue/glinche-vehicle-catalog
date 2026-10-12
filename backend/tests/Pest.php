@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 pest()->extend(TestCase::class)
@@ -45,4 +46,23 @@ function glincheAdvert(array $overrides = []): array
             ],
         ],
     ], $overrides);
+}
+
+/**
+ * Each feed is served by one successive call to the vehicles endpoint.
+ *
+ * @param  list<array<string, mixed>>  ...$feeds
+ */
+function fakeGlincheFeed(array ...$feeds): void
+{
+    $vehicles = Http::sequence();
+
+    foreach ($feeds as $feed) {
+        $vehicles->push($feed);
+    }
+
+    Http::fake([
+        'glinche.test/api/partners/login' => Http::response(['token' => 'secret-token']),
+        'glinche.test/api/partners/vehicles' => $vehicles,
+    ]);
 }
