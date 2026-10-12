@@ -35,6 +35,15 @@ describe('VehicleCard', () => {
     expect(wrapper.find('img').attributes('src')).toBe(placeholderUrl)
   })
 
+  it('tries the new photo when the vehicle photo changes after a failure', async () => {
+    const wrapper = mount(VehicleCard, { props: { vehicle } })
+    await wrapper.find('img').trigger('error')
+
+    await wrapper.setProps({ vehicle: { ...vehicle, photo_url: 'https://glinche.test/pictures/new.jpg' } })
+
+    expect(wrapper.find('img').attributes('src')).toBe('https://glinche.test/pictures/new.jpg')
+  })
+
   it('uses the placeholder when the vehicle has no photo', () => {
     const wrapper = mount(VehicleCard, { props: { vehicle: { ...vehicle, photo_url: null } } })
 
