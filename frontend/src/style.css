@@ -1,0 +1,20 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Lato', ui-sans-serif, system-ui, sans-serif;
+
+  --color-brand: #006281;
+  --color-brand-dark: #004b63;
+  --color-brand-light: #e5eff1;
+  --color-ink: #333333;
+  --color-muted: #6b6b6b;
+  --color-line: #d6d6d6;
+  --color-surface: #f5f7f8;
+}
+
+@layer base {
+  button:not(:disabled),
+  input[type='checkbox']:not(:disabled) {
+    cursor: pointer;
+  }
+}
