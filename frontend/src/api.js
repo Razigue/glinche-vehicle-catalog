@@ -21,11 +21,11 @@ export async function fetchBrands() {
   return data
 }
 
-export function fetchVehicles({ brand, page }, { signal } = {}) {
+export function fetchVehicles({ brands, page }, { signal } = {}) {
   const query = new URLSearchParams({ page: String(page) })
 
-  if (brand) {
-    query.set('brand', brand)
+  if (brands.length > 0) {
+    query.set('brand', brands.join(','))
   }
 
   return getJson(`/api/vehicles?${query}`, { signal })

@@ -16,15 +16,15 @@ afterEach(() => {
 })
 
 describe('useVehicles', () => {
-  it('loads the vehicles of the requested brand and page', async () => {
+  it('loads the vehicles of the requested brands and page', async () => {
     const fetch = vi.fn().mockResolvedValue(jsonResponse(vehiclesPage([1, 2])))
     vi.stubGlobal('fetch', fetch)
 
-    const { vehicles, pagination, loading, error } = useVehicles(ref('renault'), ref(2))
+    const { vehicles, pagination, loading, error } = useVehicles(ref(['peugeot', 'renault']), ref(2))
     expect(loading.value).toBe(true)
     await flushPromises()
 
-    expect(fetch).toHaveBeenCalledWith('/api/vehicles?page=2&brand=renault', expect.any(Object))
+    expect(fetch).toHaveBeenCalledWith('/api/vehicles?page=2&brand=peugeot%2Crenault', expect.any(Object))
     expect(vehicles.value.map((vehicle) => vehicle.id)).toEqual([1, 2])
     expect(pagination.value.total).toBe(2)
     expect(loading.value).toBe(false)
@@ -42,9 +42,9 @@ describe('useVehicles', () => {
       .mockResolvedValueOnce(jsonResponse(vehiclesPage([2])))
     vi.stubGlobal('fetch', fetch)
 
-    const brand = ref(null)
-    const { vehicles, loading, error } = useVehicles(brand, ref(1))
-    brand.value = 'renault'
+    const brands = ref([])
+    const { vehicles, loading, error } = useVehicles(brands, ref(1))
+    brands.value = ['renault']
     await nextTick()
     resolveFirstRequest(jsonResponse(vehiclesPage([1])))
     await flushPromises()
@@ -57,7 +57,7 @@ describe('useVehicles', () => {
   it('exposes the error when the request fails', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ message: 'Server Error' }, 500)))
 
-    const { vehicles, loading, error } = useVehicles(ref(null), ref(1))
+    const { vehicles, loading, error } = useVehicles(ref([]), ref(1))
     await flushPromises()
 
     expect(error.value.status).toBe(500)
