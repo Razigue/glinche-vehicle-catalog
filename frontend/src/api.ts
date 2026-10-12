@@ -9,12 +9,26 @@ export class ApiError extends Error {
   }
 }
 
+export class NetworkError extends Error {
+  constructor(cause: unknown) {
+    super('The API could not be reached', { cause })
+  }
+}
+
 interface RequestOptions {
   signal?: AbortSignal
 }
 
+export const REQUEST_TIMEOUT_MS = 10_000
+
 async function getJson<T>(path: string, { signal }: RequestOptions = {}): Promise<T> {
-  const response = await fetch(path, { headers: { Accept: 'application/json' }, signal })
+  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+  const response = await fetch(path, {
+    headers: { Accept: 'application/json' },
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  }).catch((exception: unknown) => {
+    throw exception instanceof TypeError ? new NetworkError(exception) : exception
+  })
 
   if (!response.ok) {
     throw new ApiError(response.status)

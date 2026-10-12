@@ -2,7 +2,7 @@
 
 Récupère le stock de l'API partenaires Glinche, le stocke en base et l'affiche avec un filtre multi-marques et une pagination.
 
-**Laravel 13 · MySQL 9.7 · Vue 3.5 · TypeScript · Tailwind CSS 4 · Docker** · 90 tests
+**Laravel 13 · MySQL 9.7 · Vue 3.5 · TypeScript · Tailwind CSS 4 · Docker** · 99 tests
 
 ![Catalogue](docs/desktop.png)
 
@@ -25,7 +25,7 @@ Catalogue : http://localhost:5173 · API : http://localhost:8000/api
 ```bash
 docker compose exec app php artisan vehicles:sync   # synchro manuelle (sinon toutes les heures)
 docker compose exec app php artisan test            # 61 tests Pest
-docker compose exec node npm test                   # 29 tests Vitest
+docker compose exec node npm test                   # 38 tests Vitest
 docker compose exec node npm run typecheck          # vérification TypeScript (vue-tsc)
 ```
 
@@ -66,6 +66,8 @@ Le catalogue lit **uniquement la base locale** : il reste rapide et disponible m
 | Prix absent ou à 0 | « Prix sur demande », jamais « 0 € » |
 | Lien `?brand=peugeot,renault&page=2` partagé | Même sélection, bouton retour fonctionnel |
 | Clics rapides sur les filtres | Seule la dernière réponse s'affiche (requête précédente annulée) |
+| L'API du catalogue ne répond pas | Abandon après 10 s et bouton « Réessayer » |
+| Connexion coupée ou trop de requêtes (`429`) | Un message explique la cause |
 
 Chaque ligne est couverte par un test.
 
@@ -94,7 +96,7 @@ classDiagram
 
 Une classe, une responsabilité : le **client** gère HTTP et le token, le **mapper** le format Glinche, le **synchroniseur** les règles de mise à jour. Tout est dans `backend/app/Services/Glinche/`.
 
-Côté front : `App.vue`, 4 composants, 3 composables (`useBrands`, `useVehicles`, `useUrlQuery`). Les réponses de l'API sont typées dans `types.ts` et l'URL est la seule source d'état. L'en-tête et la barre de filtres restent fixés en haut ; le filtre est un menu à cases à cocher (clavier, Échap, clic extérieur) et la pagination est numérotée, avec des points de suspension (`utils/pagination.ts`).
+Côté front : `App.vue`, 5 composants, 3 composables (`useBrands`, `useVehicles`, `useUrlQuery`). Les réponses de l'API sont typées dans `types.ts` et l'URL est la seule source d'état. L'en-tête et la barre de filtres restent fixés en haut ; le filtre est un menu à cases à cocher (clavier, Échap, clic extérieur) et la pagination est numérotée, avec des points de suspension (`utils/pagination.ts`). Pendant le chargement, des squelettes reprennent la forme des cartes et du filtre.
 
 ## Choix techniques
 

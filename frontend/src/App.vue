@@ -3,13 +3,15 @@ import { computed, useTemplateRef, watch } from 'vue'
 import BrandFilter from './components/BrandFilter.vue'
 import PaginationNav from './components/PaginationNav.vue'
 import logoUrl from './assets/glinche-automobiles-logo.svg'
+import VehicleCardSkeleton from './components/VehicleCardSkeleton.vue'
 import VehicleList from './components/VehicleList.vue'
 import { useBrands } from './composables/useBrands'
 import { useUrlQuery } from './composables/useUrlQuery'
 import { useVehicles } from './composables/useVehicles'
+import { errorMessage } from './utils/errorMessage'
 
 const { brands: brandSlugs, page, replace: replaceQuery } = useUrlQuery()
-const { brands, error: brandsError, reload: reloadBrands } = useBrands()
+const { brands, loading: brandsLoading, error: brandsError, reload: reloadBrands } = useBrands()
 const { vehicles, pagination, loading, error, reload } = useVehicles(brandSlugs, page)
 
 const selectedBrands = computed({
@@ -78,12 +80,18 @@ watch(page, () => {
       <div class="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-3">
         <div class="flex items-center justify-between gap-4">
           <BrandFilter v-if="brands.length > 0" v-model="selectedBrands" :brands="brands" class="w-full sm:w-auto" />
+          <div
+            v-else-if="brandsLoading"
+            class="h-11 w-full animate-pulse rounded-lg bg-line/50 sm:w-56"
+            role="status"
+            aria-label="Chargement des marques"
+          />
           <p v-if="pagination && !error" class="hidden shrink-0 text-sm text-muted sm:block" aria-live="polite">
             {{ resultsLabel }}
           </p>
         </div>
         <p v-if="brandsError" class="text-sm text-red-700">
-          Les marques n'ont pas pu être chargées.
+          Les marques n'ont pas pu être chargées. {{ errorMessage(brandsError) }}
           <button type="button" class="font-bold underline" @click="reloadBrands">Réessayer</button>
         </p>
       </div>
@@ -94,6 +102,7 @@ watch(page, () => {
 
     <div v-if="error" role="alert" class="rounded-lg border border-red-200 bg-red-50 p-6 text-center">
       <p class="font-bold text-red-800">Les véhicules n'ont pas pu être chargés.</p>
+      <p class="mt-1 text-sm text-red-700">{{ errorMessage(error) }}</p>
       <button
         type="button"
         class="mt-3 rounded-lg bg-brand px-4 py-2 text-sm font-bold text-white hover:bg-brand-dark"
@@ -104,7 +113,9 @@ watch(page, () => {
     </div>
 
     <ul v-else-if="isFirstLoad" class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3" aria-label="Chargement des véhicules">
-      <li v-for="placeholder in 6" :key="placeholder" class="h-96 animate-pulse rounded-lg bg-line/50" />
+      <li v-for="placeholder in 6" :key="placeholder">
+        <VehicleCardSkeleton class="h-full" />
+      </li>
     </ul>
 
     <p
