@@ -9,4 +9,7 @@ export default defineConfig({
       '/api': process.env.API_PROXY_TARGET ?? 'http://localhost:8000',
     },
   },
+  test: {
+    environment: 'jsdom',
+  },
 })
