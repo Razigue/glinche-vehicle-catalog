@@ -43,8 +43,8 @@ class GlincheApiClient
             throw new GlincheApiException('The Glinche API is unreachable.', previous: $exception);
         }
 
-        if (! is_array($adverts) || ! array_is_list($adverts)) {
-            throw new GlincheApiException('Unexpected vehicles payload: a JSON array was expected.');
+        if (! is_array($adverts) || ! array_is_list($adverts) || ! collect($adverts)->every(fn (mixed $advert) => is_array($advert))) {
+            throw new GlincheApiException('Unexpected vehicles payload: a JSON array of objects was expected.');
         }
 
         return $adverts;
