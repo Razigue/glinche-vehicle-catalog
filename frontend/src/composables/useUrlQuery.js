@@ -5,29 +5,29 @@ function readQuery() {
   const page = Number.parseInt(params.get('page') ?? '', 10)
 
   return {
-    brand: params.get('brand') || null,
+    brands: [...new Set((params.get('brand') ?? '').split(',').filter(Boolean))],
     page: Number.isInteger(page) && page > 0 ? page : 1,
   }
 }
 
 export function useUrlQuery() {
   const initial = readQuery()
-  const brand = ref(initial.brand)
+  const brands = ref(initial.brands)
   const page = ref(initial.page)
 
   let nextHistoryAction = 'push'
 
   function assign(query, historyAction) {
-    if (query.brand === brand.value && query.page === page.value) {
+    if (query.brands.join(',') === brands.value.join(',') && query.page === page.value) {
       return
     }
 
     nextHistoryAction = historyAction
-    brand.value = query.brand
+    brands.value = query.brands
     page.value = query.page
   }
 
-  watch([brand, page], () => {
+  watch([brands, page], () => {
     const historyAction = nextHistoryAction
     nextHistoryAction = 'push'
 
@@ -39,8 +39,8 @@ export function useUrlQuery() {
     url.searchParams.delete('brand')
     url.searchParams.delete('page')
 
-    if (brand.value) {
-      url.searchParams.set('brand', brand.value)
+    if (brands.value.length > 0) {
+      url.searchParams.set('brand', brands.value.join(','))
     }
     if (page.value > 1) {
       url.searchParams.set('page', String(page.value))
@@ -62,11 +62,11 @@ export function useUrlQuery() {
   }
 
   function replace(query) {
-    assign({ brand: brand.value, page: page.value, ...query }, 'replace')
+    assign({ brands: brands.value, page: page.value, ...query }, 'replace')
   }
 
   window.addEventListener('popstate', restoreFromHistory)
   onBeforeUnmount(() => window.removeEventListener('popstate', restoreFromHistory))
 
-  return { brand, page, replace }
+  return { brands, page, replace }
 }

@@ -1,7 +1,7 @@
 import { ref, watch } from 'vue'
 import { fetchVehicles } from '../api'
 
-export function useVehicles(brand, page) {
+export function useVehicles(brands, page) {
   const vehicles = ref([])
   const pagination = ref(null)
   const loading = ref(false)
@@ -19,7 +19,7 @@ export function useVehicles(brand, page) {
 
     try {
       const { data, meta } = await fetchVehicles(
-        { brand: brand.value, page: page.value },
+        { brands: brands.value, page: page.value },
         { signal: request.signal },
       )
       vehicles.value = data
@@ -36,7 +36,7 @@ export function useVehicles(brand, page) {
     }
   }
 
-  watch([brand, page], load, { immediate: true })
+  watch([brands, page], load, { immediate: true })
 
   return { vehicles, pagination, loading, error, reload: load }
 }
