@@ -1,104 +1,182 @@
 # Glinche – Catalogue de véhicules
 
-Application qui récupère les véhicules de l'API partenaires Glinche (V1), les stocke en base et les affiche avec un filtre par marque et une pagination.
+Synchronisation du stock de l'API partenaires Glinche V1 dans une base locale, et catalogue Vue.js avec filtre par marque et pagination.
 
-- **Back-end** : Laravel 13 (API uniquement), MySQL 9.7, tests Pest
-- **Front-end** : Vue 3.5 + TypeScript (Composition API, `<script setup lang="ts">`), Vite, Tailwind CSS 4, tests Vitest
-- **Environnement** : Docker Compose (`app`, `nginx`, `mysql`, `node`, `scheduler`)
+**Laravel 13** (API) · **MySQL 9.7** · **Vue 3.5** + **TypeScript** (Composition API) · **Tailwind CSS 4** · **Docker Compose** · **81 tests** (Pest + Vitest)
 
-![Aperçu](docs/apercu.png)
+![Catalogue sur desktop](docs/desktop.png)
+
+<table>
+  <tr>
+    <td width="30%"><img src="docs/mobile.png" alt="Catalogue sur mobile"></td>
+    <td valign="top">
+      <img src="docs/erreur.png" alt="État d'erreur avec bouton Réessayer">
+      <p>Mobile, et état d'erreur quand l'API ne répond pas. La marque et la page sont dans l'URL (<code>?brand=renault&amp;page=2</code>) : un lien partagé ou une page rechargée garde la sélection, et le bouton retour du navigateur fonctionne.</p>
+    </td>
+  </tr>
+</table>
 
 ## Sommaire
 
-- [Installation avec Docker (recommandé)](#installation-avec-docker-recommandé)
-- [Variables d'environnement](#variables-denvironnement)
-- [Lancement sans Docker](#lancement-sans-docker)
-- [Synchronisation des véhicules](#synchronisation-des-véhicules)
-- [Tests](#tests)
+- [Démarrage](#démarrage)
+- [Vue d'ensemble](#vue-densemble)
+- [Synchronisation](#synchronisation)
+- [Diagramme de classes](#diagramme-de-classes)
+- [Modèle de données](#modèle-de-données)
+- [Front-end](#front-end)
+- [Décisions d'architecture](#décisions-darchitecture)
+- [Qualité et tests](#qualité-et-tests)
 - [API exposée](#api-exposée)
-- [Architecture](#architecture)
-- [Choix techniques](#choix-techniques)
-- [Difficultés rencontrées](#difficultés-rencontrées)
-- [Améliorations possibles](#améliorations-possibles)
+- [Ce que l'API m'a appris](#ce-que-lapi-ma-appris)
+- [Pistes d'évolution](#pistes-dévolution)
 
-## Installation avec Docker (recommandé)
-
-Prérequis : Docker et Docker Compose.
+## Démarrage
 
 ```bash
 git clone git@github.com:Razigue/glinche-vehicle-catalog.git
 cd glinche-vehicle-catalog
-cp backend/.env.example backend/.env
-# Renseigner GLINCHE_API_URL, GLINCHE_API_EMAIL et GLINCHE_API_PASSWORD dans backend/.env
+cp backend/.env.example backend/.env   # renseigner GLINCHE_API_URL, GLINCHE_API_EMAIL, GLINCHE_API_PASSWORD
 docker compose up -d --build
 ```
 
-Au premier démarrage, le conteneur `app` installe les dépendances Composer, génère la clé applicative, exécute les migrations puis lance une première synchronisation. Le conteneur `node` installe les dépendances npm puis démarre Vite.
+Le conteneur `app` installe les dépendances, exécute les migrations et lance une première synchronisation. Il passe `healthy` après environ une minute.
 
 | Service | URL |
 |---|---|
-| Application Vue | http://localhost:5173 |
-| API Laravel | http://localhost:8000/api |
+| Catalogue (Vue) | http://localhost:5173 |
+| API (Laravel) | http://localhost:8000/api |
 
-Le premier démarrage prend environ une minute. `docker compose ps` indique `healthy` pour `app` une fois l'initialisation terminée.
+```bash
+docker compose exec app php artisan vehicles:sync   # synchronisation manuelle (planifiée toutes les heures)
+docker compose exec app php artisan test            # 60 tests Pest
+docker compose exec node npm test                   # 21 tests Vitest
+docker compose exec node npm run typecheck          # vérification TypeScript (vue-tsc)
+```
 
-> Sous Linux, les fichiers créés par les conteneurs appartiennent à l'utilisateur `1000:1000`. Avec un autre identifiant : `UID=$(id -u) GID=$(id -g) docker compose up -d --build`.
+<details>
+<summary><b>Variables d'environnement</b></summary>
 
-## Variables d'environnement
+Tout est dans `backend/.env`, ignoré par Git. `backend/.env.example` est déjà configuré pour Docker, seules les variables `GLINCHE_*` sont à renseigner.
 
-Toutes les variables sont dans `backend/.env` (copié depuis `backend/.env.example`, qui est déjà configuré pour Docker). Seules les variables propres à l'exercice sont à renseigner :
+| Variable | Description |
+|---|---|
+| `GLINCHE_API_URL` | `https://marketplace-dev.glinche-automobiles.com/api` |
+| `GLINCHE_API_EMAIL` | identifiant partenaire (fourni dans le sujet) |
+| `GLINCHE_API_PASSWORD` | mot de passe partenaire, entre apostrophes car il contient `!` |
 
-| Variable | Description | Valeur pour l'exercice |
-|---|---|---|
-| `GLINCHE_API_URL` | URL de base de l'API partenaires | `https://marketplace-dev.glinche-automobiles.com/api` |
-| `GLINCHE_API_EMAIL` | Identifiant partenaire | fourni dans le sujet |
-| `GLINCHE_API_PASSWORD` | Mot de passe partenaire | fourni dans le sujet, entre apostrophes car il contient `!` |
-| `DB_*` | Connexion MySQL | déjà alignée sur le service `mysql` de `compose.yaml` |
+Si une variable `GLINCHE_*` manque, le client échoue avec un message explicite. Sous Linux avec un UID différent de 1000 : `UID=$(id -u) GID=$(id -g) docker compose up -d --build`.
 
-Les identifiants ne sont jamais commités : `backend/.env` est ignoré par Git. Si une variable `GLINCHE_*` manque, l'application échoue dès l'appel au client avec un message explicite.
+</details>
 
-## Lancement sans Docker
+<details>
+<summary><b>Lancement sans Docker</b></summary>
 
-Prérequis : PHP 8.3+ (extensions `pdo_mysql` ou `pdo_sqlite`), Composer, Node.js 20.19+ ou 22.12+.
-
-### Laravel
+Prérequis : PHP 8.3+ (`pdo_mysql` ou `pdo_sqlite`), Composer, Node.js 20.19+ ou 22.12+.
 
 ```bash
 cd backend
-composer install
-cp .env.example .env
-php artisan key:generate
+composer install && cp .env.example .env && php artisan key:generate
+# .env : renseigner GLINCHE_*, et pour SQLite remplacer le bloc DB_* par DB_CONNECTION=sqlite
+touch database/database.sqlite   # si SQLite
+php artisan migrate && php artisan vehicles:sync
+php artisan serve                # http://localhost:8000
+php artisan schedule:work        # optionnel : synchronisation horaire
+
+cd ../frontend
+npm install && npm run dev       # http://localhost:5173, /api relayé vers localhost:8000
 ```
 
-Dans `.env`, renseigner les variables `GLINCHE_*`, puis choisir la base :
+`API_PROXY_TARGET` change la cible du proxy Vite (Docker la règle sur `http://nginx`).
 
-- **MySQL local** : adapter `DB_HOST`, `DB_DATABASE`, `DB_USERNAME` et `DB_PASSWORD`.
-- **SQLite** (plus simple) : remplacer le bloc `DB_*` par la seule ligne `DB_CONNECTION=sqlite`, puis exécuter `touch database/database.sqlite`.
+</details>
 
-```bash
-php artisan migrate
-php artisan vehicles:sync
-php artisan serve            # http://localhost:8000
-php artisan schedule:work    # optionnel, dans un autre terminal : synchronisation horaire
+## Vue d'ensemble
+
+Deux flux indépendants : la **synchronisation** écrit en base (commande planifiée), le **catalogue** ne fait que lire. Le front ne dépend jamais de la disponibilité de l'API Glinche.
+
+```mermaid
+flowchart LR
+    glinche[("API Glinche V1")]
+
+    subgraph docker["Docker Compose"]
+        direction LR
+        scheduler["scheduler<br/>schedule:work"]
+        subgraph app["app : Laravel 13"]
+            sync["vehicles:sync<br/>Client → Mapper → Synchronizer"]
+            api["Contrôleurs<br/>/api/brands · /api/vehicles"]
+        end
+        mysql[("MySQL 9.7")]
+        nginx["nginx"]
+        node["node : Vite<br/>SPA Vue 3 + TS"]
+    end
+
+    browser(["Navigateur"])
+
+    scheduler -- "toutes les heures" --> sync
+    sync -- "login + GET vehicles" --> glinche
+    sync -- "transaction" --> mysql
+    api -- "lecture paginée" --> mysql
+    nginx --> api
+    browser --> node
+    node -- "proxy /api (même origine)" --> nginx
 ```
 
-### Vue.js
-
-```bash
-cd frontend
-npm install
-npm run dev                  # http://localhost:5173
+```
+backend/app/
+├── Console/Commands/SyncVehicles.php    commande vehicles:sync, verrou
+├── Services/Glinche/                    client HTTP, mapper, DTO, synchroniseur, bilan
+├── Enums/{Energy,Gearbox}.php           codes de l'API → libellés français
+├── Models/{Brand,Vehicle}.php
+└── Http/{Controllers,Resources}/        2 endpoints en lecture seule
+frontend/src/
+├── api.ts                               fetch + ApiError
+├── types.ts                             types des réponses de l'API
+├── composables/                         useBrands, useVehicles, useUrlQuery
+└── components/                          BrandFilter, VehicleList, VehicleCard, PaginationNav
 ```
 
-Vite relaie les appels `/api` vers `http://localhost:8000`. Pour une autre adresse, utiliser la variable `API_PROXY_TARGET` (Docker la règle sur `http://nginx`).
+## Synchronisation
 
-## Synchronisation des véhicules
+La base est le **miroir** du flux Glinche. L'appel réseau a lieu **avant** la transaction : si l'API tombe, rien n'est modifié. Une annonce invalide est ignorée sans bloquer les autres.
 
-```bash
-docker compose exec app php artisan vehicles:sync   # ou php artisan vehicles:sync sans Docker
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Cmd as vehicles:sync
+    participant Sync as VehicleSynchronizer
+    participant Client as GlincheApiClient
+    participant API as API Glinche
+    participant Mapper as VehicleMapper
+    participant DB as MySQL
+
+    Cmd->>Cmd: Cache::lock (une seule synchro à la fois)
+    Cmd->>Sync: sync()
+    Sync->>Client: fetchVehicles()
+    Client->>API: POST /partners/login (token en cache 50 min)
+    Client->>API: GET /partners/vehicles
+    alt 401
+        Client->>API: nouveau login, une seule fois
+    else 5xx ou réseau
+        Client->>API: jusqu'à 3 tentatives
+    end
+    alt échec définitif
+        Client-->>Cmd: GlincheApiException : base intacte, exit FAILURE
+    end
+    Client-->>Sync: tout le stock (tableau, sans pagination)
+    Sync->>DB: BEGIN
+    loop chaque annonce
+        Sync->>Mapper: map(advert)
+        alt annonce invalide
+            Mapper-->>Sync: ValidationException → skipped, journalisée
+        else valide
+            Mapper-->>Sync: VehicleData
+            Sync->>DB: firstOrNew + firstOrCreate(brand) → created / updated / unchanged
+        end
+    end
+    Sync->>DB: DELETE absents du flux ou avec deleteDate
+    Sync->>DB: COMMIT
+    Sync-->>Cmd: SyncReport
 ```
-
-La commande affiche puis journalise (`storage/logs/laravel.log`) le bilan de la synchronisation :
 
 ```
 +---------+---------+-----------+---------+---------+
@@ -108,169 +186,223 @@ La commande affiche puis journalise (`storage/logs/laravel.log`) le bilan de la 
 +---------+---------+-----------+---------+---------+
 ```
 
-Elle est aussi planifiée **toutes les heures** par le service `scheduler` (`php artisan schedule:work`), et lancée une fois au démarrage du conteneur `app`. Un verrou empêche deux synchronisations simultanées : une exécution qui le trouve pris s'arrête avec un avertissement.
+Deuxième exécution sans changement côté Glinche : tout est `unchanged`, la synchronisation est idempotente.
 
-## Tests
+## Diagramme de classes
 
-```bash
-docker compose exec app php artisan test   # back-end : 60 tests Pest
-docker compose exec node npm test          # front-end : 21 tests Vitest
-docker compose exec node npm run typecheck # front-end : vérification TypeScript
+```mermaid
+classDiagram
+    direction LR
+
+    class SyncVehicles {
+        <<Command>>
+        +LOCK_NAME = "vehicles-sync"
+        +handle(VehicleSynchronizer) int
+    }
+    class VehicleSynchronizer {
+        +sync() SyncReport
+        -upsert(VehicleData, Carbon, SyncReport)
+        -findOrCreateBrand(VehicleData) Brand
+        -listedReferences(array) list~string~
+    }
+    class GlincheApiClient {
+        -baseUrl
+        -email
+        -password
+        +fetchVehicles() array
+        -token() string
+        -authenticatedGet(uri) Response
+    }
+    class VehicleMapper {
+        +map(array advert) VehicleData
+        -priceInCents(array) int
+        -photoUrl(array) string
+    }
+    class VehicleData {
+        <<readonly DTO>>
+        +externalId
+        +brandName
+        +brandSlug
+        +model
+        +priceInCents
+        +energy Energy
+        +gearbox Gearbox
+        +isDeleted bool
+        +raw array
+    }
+    class SyncReport {
+        +created int
+        +updated int
+        +unchanged int
+        +deleted int
+        +skipped int
+        +toArray() array
+    }
+    class GlincheApiException {
+        <<RuntimeException>>
+    }
+    class Brand {
+        <<Model>>
+        +name
+        +slug
+        +vehicles() HasMany
+    }
+    class Vehicle {
+        <<Model>>
+        +external_id
+        +model
+        +price
+        +raw
+        +brand() BelongsTo
+    }
+    class Energy {
+        <<enum>>
+        +label() string
+    }
+    class Gearbox {
+        <<enum>>
+        +label() string
+    }
+    class VehicleController {
+        +PER_PAGE = 6
+        +index(Request)
+    }
+    class BrandController {
+        +index()
+    }
+
+    SyncVehicles ..> VehicleSynchronizer : injecte
+    VehicleSynchronizer --> GlincheApiClient
+    VehicleSynchronizer --> VehicleMapper
+    VehicleSynchronizer ..> SyncReport : produit
+    VehicleMapper ..> VehicleData : crée
+    GlincheApiClient ..> GlincheApiException : lève
+    VehicleData --> Energy
+    VehicleData --> Gearbox
+    VehicleSynchronizer ..> Vehicle : écrit
+    Brand "1" --> "*" Vehicle
+    VehicleController ..> Vehicle : lit
+    BrandController ..> Brand : lit
 ```
 
-Sans Docker : `php artisan test` dans `backend/` et `npm test` dans `frontend/`.
+Chaque classe a une seule raison de changer : le **client** connaît le protocole HTTP, le **mapper** connaît le format des annonces, le **synchroniseur** connaît les règles de mise à jour. Le DTO immuable `VehicleData` fait la frontière entre le monde externe et Eloquent.
 
-Les tests back-end tournent sur SQLite en mémoire et simulent l'API Glinche avec `Http::fake()`. Ils couvrent :
+## Modèle de données
 
-- le client (token mis en cache, nouvelle connexion après un `401`, retry sur erreur serveur, erreurs réseau et réponses inattendues) ;
-- le mapper (prix, photo, codes inconnus, champs obligatoires) ;
-- la synchronisation (création, mise à jour, idempotence, suppression, regroupement des marques, annonce invalide, API indisponible, verrou, planification) ;
-- les endpoints (forme de la réponse, filtre, pagination, tri, validation, limitation de débit).
+```mermaid
+erDiagram
+    BRANDS ||--o{ VEHICLES : "regroupe"
+    BRANDS {
+        bigint id PK
+        string name UK
+        string slug UK "citroen = Citroën = CITROEN"
+    }
+    VEHICLES {
+        bigint id PK
+        string external_id UK "reference Glinche"
+        bigint brand_id FK "restrict on delete"
+        string model
+        string version "nullable"
+        smallint year "nullable"
+        int mileage
+        string energy "code EH, GO, EL..."
+        string gearbox "code AUT, MAN..."
+        int price "centimes TTC, nullable"
+        string photo_url "nullable"
+        json raw "annonce complète"
+        timestamp synced_at
+    }
+```
 
-Les tests front-end couvrent le formatage, le filtre, la carte (image de secours), le composable `useVehicles` (requêtes concurrentes, erreurs) et la synchronisation avec l'URL (historique du navigateur, corrections sans nouvelle entrée).
+Index `(brand_id, model)` aligné sur le tri de la liste.
+
+## Front-end
+
+```mermaid
+flowchart TD
+    App["App.vue"]
+    App --> BrandFilter
+    App --> VehicleList --> VehicleCard
+    App --> PaginationNav
+
+    App -. "brand, page" .- useUrlQuery["useUrlQuery<br/>état ⇄ URL (history API)"]
+    App -. "liste + compteurs" .- useBrands
+    App -. "page courante" .- useVehicles["useVehicles<br/>AbortController"]
+    useBrands --> api["api.ts"]
+    useVehicles --> api
+```
+
+- **L'URL est la source de vérité** : pas de store global. Les corrections automatiques (marque inconnue, page hors limites) remplacent l'entrée d'historique au lieu d'en ajouter une, pour ne pas piéger le bouton retour.
+- **Requêtes concurrentes** : un changement de filtre annule la requête en cours, une réponse lente ne peut pas écraser un résultat plus récent.
+- **Tous les états sont traités** : squelettes au premier chargement, liste précédente estompée pendant un changement de page, erreur avec « Réessayer », liste vide, image de secours.
+- **Accessibilité** : `aria-pressed` sur le filtre, `aria-live` sur le compteur et la pagination, textes alternatifs.
+
+## Décisions d'architecture
+
+| Décision | Pourquoi | Alternative écartée |
+|---|---|---|
+| Synchro en commande planifiée, front en lecture seule | Le catalogue reste rapide et disponible même si Glinche ne répond pas | Appeler Glinche à chaque visite |
+| Base miroir du flux (suppression des absents) | Un véhicule vendu disparaît du catalogue sans action manuelle | Suppression logique, conservation indéfinie |
+| Appel API avant la transaction | Une panne ne vide jamais la base | Tout faire dans la transaction |
+| Validation par annonce dans le mapper | Une donnée hors limites devient un `skipped` journalisé, pas une erreur SQL qui annulerait toute la synchro | Laisser la base rejeter |
+| Token en cache + reconnexion unique sur `401` | La durée de vie du token Sanctum n'est pas documentée | Cache seul, ou login à chaque appel |
+| Retry uniquement sur 5xx et erreurs réseau | Retenter un `401` ou un `422` ne changerait rien | Retry sur toute erreur |
+| Prix en centimes, conversion sur la chaîne | Pas d'arrondi flottant, `0` affiché « Prix sur demande » | `float` ou `decimal` |
+| Marques identifiées par slug | « Citroen » et « Citroën » sont une seule marque | Nom brut |
+| `firstOrNew` ligne par ligne | Bilan exact créé / modifié / inchangé, coût négligeable à ce volume | `upsert()` groupé |
+| Colonne `raw` (annonce complète) | Fiche détaillée possible plus tard sans nouvel appel | Ne stocker que l'affiché |
+| Pagination serveur, 6 par page, tri marque → modèle → id | Payload constant quand le stock grossit, 6 remplit la grille en 1, 2 ou 3 colonnes, tri stable entre les pages | Pagination côté client |
+| Vite relaie `/api` vers nginx | Même origine, aucune configuration CORS | CORS ouvert |
+| Ni Pinia, ni Vue Router, ni repository pattern | Un seul écran, trois composables suffisent | Outillage prévu pour une application plus grande |
+
+## Qualité et tests
+
+- **60 tests Pest** (SQLite en mémoire, API simulée par `Http::fake()`) : client (cache du token, `401`, retry, réponses inattendues), mapper (prix, photo, codes inconnus, limites de colonnes), synchronisation (idempotence, suppressions, regroupement des marques, annonce invalide, API indisponible, verrou, planification), endpoints (filtre, pagination, tri, validation, limitation de débit).
+- **21 tests Vitest** : formatage, filtre, carte, requêtes concurrentes de `useVehicles`, historique du navigateur dans `useUrlQuery`.
+- **Pint** pour le style PHP, **commits conventionnels**, git flow `main` / `develop` / `feature/*` fusionnées en `--no-ff`.
+- **Docker durci** : images officielles, ports publiés sur `127.0.0.1`, seul `index.php` exécutable par nginx, en-têtes de sécurité, 120 requêtes par minute et par IP. `nginx` et `scheduler` attendent que `app` soit `healthy`, c'est-à-dire migrations passées.
+
+Les conventions du dépôt et les pièges connus sont décrits dans [`AGENTS.md`](AGENTS.md).
 
 ## API exposée
 
-### `GET /api/brands`
+| Endpoint | Réponse |
+|---|---|
+| `GET /api/brands` | Marques ayant au moins un véhicule, avec `vehicles_count` |
+| `GET /api/vehicles?brand={slug}&page={n}` | 6 véhicules par page, format paginé Laravel (`data`, `links`, `meta`) |
 
-Marques ayant au moins un véhicule, triées par nom, avec leur nombre de véhicules.
-
-```json
-{ "data": [{ "name": "Renault", "slug": "renault", "vehicles_count": 3 }] }
-```
-
-### `GET /api/vehicles?brand={slug}&page={n}`
-
-Véhicules triés par marque puis modèle, **6 par page**. `brand` et `page` sont optionnels. Réponse paginée standard Laravel (`data`, `links`, `meta`) :
+<details>
+<summary>Exemple de véhicule</summary>
 
 ```json
 {
-  "data": [{
-    "id": 1,
-    "reference": "GLI00004457",
-    "brand": { "name": "Toyota", "slug": "toyota" },
-    "model": "YARIS CROSS",
-    "version": "Hybride 130h Design 2WD",
-    "year": 2024,
-    "mileage": 20,
-    "energy": "Hybride essence",
-    "gearbox": "Automatique",
-    "price_in_cents": 2670000,
-    "photo_url": "https://marketplace-dev.glinche-automobiles.com/storage/vehicles/pictures/69e0de4707fcc.jpg"
-  }],
-  "links": { "first": "…", "last": "…", "prev": null, "next": "…" },
-  "meta": { "current_page": 1, "last_page": 2, "per_page": 6, "total": 9 }
+  "id": 1,
+  "reference": "GLI00004457",
+  "brand": { "name": "Toyota", "slug": "toyota" },
+  "model": "YARIS CROSS",
+  "version": "Hybride 130h Design 2WD",
+  "year": 2024,
+  "mileage": 20,
+  "energy": "Hybride essence",
+  "gearbox": "Automatique",
+  "price_in_cents": 2670000,
+  "photo_url": "https://marketplace-dev.glinche-automobiles.com/storage/vehicles/pictures/69e0de4707fcc.jpg"
 }
 ```
 
-## Architecture
+</details>
 
-```
-backend/
-├── app/Console/Commands/SyncVehicles.php     # commande vehicles:sync
-├── app/Enums/{Energy,Gearbox}.php            # codes de l'API et libellés français
-├── app/Http/Controllers/                     # BrandController, VehicleController
-├── app/Http/Resources/                       # BrandResource, VehicleResource
-├── app/Models/{Brand,Vehicle}.php
-├── app/Services/Glinche/
-│   ├── GlincheApiClient.php                  # authentification, cache du token, retry
-│   ├── VehicleMapper.php                     # payload externe → VehicleData
-│   ├── VehicleData.php                       # DTO immuable
-│   ├── VehicleSynchronizer.php               # upsert, marques, suppressions
-│   └── SyncReport.php                        # bilan de synchronisation
-└── routes/{api,console}.php                  # endpoints et planification
+## Ce que l'API m'a appris
 
-frontend/src/
-├── api.ts                                    # appels HTTP
-├── types.ts                                  # types des réponses de l'API
-├── composables/                              # useBrands, useVehicles, useUrlQuery
-├── components/                               # BrandFilter, VehicleList, VehicleCard, PaginationNav
-└── utils/format.ts                           # Intl.NumberFormat('fr-FR')
+- **La documentation est rendue en JavaScript.** La spécification OpenAPI (`/docs/openapi.json`) a été retrouvée dans le bundle, puis confrontée à un appel réel. Elle a fixé les enums `energy` et `gearbox`, le rôle de `reference` et la priorité des prix.
+- **`GET /partners/vehicles` n'est pas paginé** : tout le stock arrive dans un tableau, les paramètres `page` et `limit` sont ignorés. Le client n'a donc pas de boucle de pagination.
+- **MySQL réordonne les clés JSON.** La colonne `raw` semblait modifiée à chaque synchro (« 9 updated » au lieu de « 9 unchanged »), ce que les tests SQLite ne voyaient pas. Corrigé par une comparaison indépendante de l'ordre des clés, et couvert par un test.
+- **Les données de test sont incohérentes**, et affichées telles quelles plutôt que « corrigées » : Captur TCe déclaré électrique, `catalogPrice` à `0.00` (d'où `merchantPrice` en repli de `price`), « Citroen » sans tréma (d'où les slugs), Iveco Daily sans année, deux Renault Master identiques à la référence près (d'où la référence sur chaque carte).
 
-docker/                                       # Dockerfile PHP, script de démarrage, configuration nginx
-```
+## Pistes d'évolution
 
-Les consignes pour les agents IA (conventions, pièges connus) sont dans [`AGENTS.md`](AGENTS.md).
-
-Git flow : `main`, `develop` et une branche `feature/*` par fonctionnalité, fusionnée dans `develop` avec `--no-ff`. Commits conventionnels.
-
-## Choix techniques
-
-### Exploration de l'API avant de modéliser
-
-La documentation est une page Swagger rendue en JavaScript. Elle charge la spécification OpenAPI depuis `/docs/openapi.json` : c'est ce fichier qui a servi de référence, avec un appel réel pour vérifier les données. Constats qui ont guidé le schéma :
-
-- `POST /partners/login` renvoie un token Sanctum (`id|secret`), sans durée de validité indiquée.
-- `GET /partners/vehicles` renvoie **tout le stock dans un tableau JSON, sans pagination** (les paramètres `page`, `per_page` et `limit` sont ignorés). Le client ne gère donc pas de pagination côté Glinche : il n'y en a pas.
-- `reference` est l'identifiant stable d'une annonce et devient `external_id`.
-
-### Client API
-
-- **Token en cache pendant 50 minutes.** Sa durée de vie réelle étant inconnue, le client invalide le cache et se reconnecte une fois si l'API répond `401`. Le cache seul ne suffirait pas.
-- **Timeout de 15 s et 3 tentatives**, uniquement sur les erreurs réseau et les erreurs serveur (5xx). Retenter un `401` ou un `422` ne servirait à rien.
-- **Toutes les erreurs deviennent une `GlincheApiException`.** La commande n'a qu'un seul type d'erreur à traiter.
-
-### Mapping et données
-
-- **Validation de chaque annonce** (`Validator`) avant le mapping : une annonce incomplète, ou dont une valeur ne tiendrait pas dans sa colonne (texte trop long, kilométrage hors limites, marque sans slug possible), est ignorée et journalisée sans bloquer les autres. Sans cette validation, une seule erreur SQL dans la transaction ferait échouer toute la synchronisation.
-- **Prix** : la spécification indique que `price` est le prix public TTC, mais ce champ est optionnel et absent des données actuelles. Le mapper l'utilise en priorité, puis se rabat sur `merchantPrice` (prix marchand TTC). Le prix est stocké **en centimes** (entier), et la conversion se fait sur la chaîne pour éviter les erreurs d'arrondi des flottants. Un prix nul devient « Prix sur demande » plutôt que « 0 € ».
-- **Photo** : la photo `MAIN` (une seule autorisée par la spécification), sinon la première photo valide, sinon une image de secours côté front. Seules les URL HTTP(S) sont retenues. Une photo invalide est ignorée, sans rejeter le véhicule.
-- **Énergie et boîte de vitesses** : les codes (`EH`, `AUT`…) sont stockés tels quels et convertis par des enums PHP dont les libellés français reprennent la spécification. Un code inconnu donne `null` au lieu de faire échouer la synchronisation.
-- **`raw`** conserve l'annonce complète (équipements, autres photos…) pour de futurs usages sans nouvel appel à l'API.
-
-### Synchronisation
-
-- **La base est le miroir du flux** : un véhicule absent du flux ou portant une `deleteDate` est supprimé localement.
-- **Idempotente** : identification par `external_id`. Une synchronisation sans changement ne modifie que `synced_at` et compte les véhicules comme `unchanged`.
-- **Transactionnelle** : l'appel à l'API a lieu avant la transaction. Si l'API est indisponible, rien n'est modifié ni supprimé.
-- **Annonce invalide mais toujours listée** : elle est ignorée et sa dernière version valide est conservée, plutôt que de supprimer un véhicule toujours en vente.
-- **Marques identifiées par leur slug** : « Citroën », « Citroen » et « CITROEN » donnent une seule marque `citroen`.
-- **Upsert ligne par ligne** (`firstOrNew`) plutôt qu'un `upsert()` groupé : cela permet un bilan précis (créé / modifié / inchangé). Pour quelques dizaines ou centaines de véhicules, le coût est négligeable.
-
-### Pagination
-
-La pagination est faite **côté serveur** (`paginate`) : le front ne reçoit que la page affichée, ce qui reste valable quand le stock grossit. Une pagination côté client aurait seulement masqué une liste déjà entièrement chargée.
-
-- **6 véhicules par page** : deux rangées complètes de la grille à 3 colonnes, et un nombre divisible par les grilles mobile (1) et tablette (2). Avec les 9 véhicules actuels, la pagination est visible (2 pages).
-- **Tri stable** (marque, modèle, puis `id`) : un véhicule ne peut pas apparaître sur deux pages.
-- **Liste des marques indépendante de la page affichée** : elle vient de `/api/brands`, construite à partir des véhicules disponibles, avec un compteur par marque.
-
-Le filtre est appliqué immédiatement au clic. La liste précédente reste affichée (estompée) pendant le chargement, sans écran blanc.
-
-### Front-end
-
-- **Marque et page dans l'URL** (`?brand=renault&page=2`) : un lien partagé ou une page rechargée affiche la même sélection, et les boutons précédent/suivant du navigateur fonctionnent. Une marque inconnue ou une page hors limites sont corrigées automatiquement.
-- **Requêtes concurrentes** : un nouveau filtre annule la requête précédente (`AbortController`). Une réponse lente ne peut donc pas remplacer un résultat plus récent.
-- **États gérés** : chargement (squelettes), erreur avec bouton « Réessayer », liste vide, image de secours.
-- **Accessibilité** : `aria-pressed` sur le filtre, `aria-live` sur le nombre de résultats et la pagination, textes alternatifs sur les photos.
-- Pas de Pinia ni de Vue Router : trois composables suffisent pour un seul écran.
-
-### Docker
-
-Images officielles uniquement (`php:8.4-fpm-alpine` complétée par `pdo_mysql`, `nginx`, `mysql:9.7`, `node:24-alpine`). Le service `app` n'est déclaré `healthy` qu'une fois les migrations passées : `nginx` et `scheduler` attendent cet état, ce qui évite les erreurs au premier démarrage. Vite relaie `/api` vers nginx, donc le front et l'API partagent la même origine et aucune configuration CORS n'est nécessaire.
-
-Durcissement : ports publiés sur `127.0.0.1` uniquement, en-têtes de sécurité et seul `index.php` exécutable côté nginx, limite de 120 requêtes par minute et par IP sur l'API. Le healthcheck MySQL passe par TCP : le serveur temporaire lancé pendant l'initialisation n'écoute que sur le socket, donc un ping par socket déclarerait la base prête trop tôt.
-
-## Difficultés rencontrées
-
-- **Documentation rendue en JavaScript** : la page ne contient que du JavaScript. Il a fallu retrouver dans le bundle l'adresse de la spécification OpenAPI (`/docs/openapi.json`) pour lire les schémas, les enums et les descriptions de champs.
-- **Durée de vie du token inconnue** : le token Sanctum n'indique pas d'expiration, contrairement à un JWT. D'où la combinaison cache + nouvelle connexion sur `401`.
-- **Incohérences dans les données de test**, affichées telles qu'elles sont reçues :
-  - le Renault Captur « TCe » (essence) est déclaré `EL` (électrique) ;
-  - `catalogPrice` vaut `0.00` pour deux véhicules (d'où le choix de `merchantPrice`) ;
-  - « Citroen » est écrit sans tréma (d'où le regroupement des marques par slug) ;
-  - les libellés d'équipements ont un encodage cassé (non affichés) ;
-  - l'Iveco Daily n'a pas d'année ;
-  - les deux Renault Master sont identiques à la référence près (d'où l'affichage de la référence sur chaque carte).
-- **Idempotence faussée par MySQL** : la colonne `JSON` de MySQL réordonne les clés à l'enregistrement. La comparaison stricte d'Eloquent voyait donc `raw` comme modifié à chaque synchronisation (« 9 updated » au lieu de « 9 unchanged »). SQLite conserve l'ordre, donc les tests ne détectaient pas le problème. Corrigé par une comparaison qui ignore l'ordre des clés, et couvert par un test dédié.
-
-## Améliorations possibles
-
-- **Fiche détaillée** par véhicule, avec la galerie complète et les équipements (déjà stockés dans `raw`).
-- **Filtres et tris supplémentaires** : énergie, fourchette de prix, kilométrage, tri par prix.
-- **Pagination numérotée** (1, 2, 3…) quand le nombre de pages augmentera. Pour l'instant, précédent/suivant suffit.
-- **Nettoyage des marques** qui n'ont plus de véhicule (aujourd'hui seulement masquées par `/api/brands`).
-- **Synchronisation en file d'attente** (job Laravel) et notification en cas d'échecs répétés.
-- **Build de production** : image multi-étapes, `npm run build` servi par nginx, `APP_DEBUG=false`.
-- **Intégration continue** (GitHub Actions) : Pint, Pest, Vitest et build front à chaque push.
-- **Tests de bout en bout** (Playwright) sur le parcours filtre + pagination.
+- Fiche détaillée avec galerie et équipements, déjà disponibles dans `raw`.
+- Filtres énergie, prix, kilométrage, et tri par prix.
+- Synchro en job de file d'attente, alerte après plusieurs échecs consécutifs.
+- Build de production : image multi-étapes, front compilé servi par nginx, `APP_DEBUG=false`.
+- CI GitHub Actions (Pint, Pest, Vitest, build) et tests de bout en bout Playwright.
