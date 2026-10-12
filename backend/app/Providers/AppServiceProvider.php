@@ -10,9 +10,9 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(GlincheApiClient::class, fn () => new GlincheApiClient(
-            baseUrl: config()->string('services.glinche.url'),
-            email: config()->string('services.glinche.email'),
-            password: config()->string('services.glinche.password'),
+            baseUrl: (string) config('services.glinche.url'),
+            email: (string) config('services.glinche.email'),
+            password: (string) config('services.glinche.password'),
         ));
     }
 }
