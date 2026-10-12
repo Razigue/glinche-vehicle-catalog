@@ -106,4 +106,13 @@ it('rejects invalid query parameters', function (array $query, string $field) {
     'page below one' => [['page' => 0], 'page'],
     'page not a number' => [['page' => 'two'], 'page'],
     'brand not a string' => [['brand' => ['peugeot']], 'brand'],
+    'brand too long' => [['brand' => str_repeat('a', 256)], 'brand'],
 ]);
+
+it('rate limits the API per client', function () {
+    for ($attempt = 0; $attempt < 120; $attempt++) {
+        $this->getJson('/api/vehicles')->assertOk();
+    }
+
+    $this->getJson('/api/vehicles')->assertTooManyRequests();
+});
